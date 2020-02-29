@@ -1,0 +1,8 @@
+default:
+  cdrprod:
+    driver: 'SQL Server' 
+    server: 'SPDBSSYN001'
+    uid: 'cdruserprod'
+    pwd: '!CDRuserProd4'  
+    database: 'CDRProd'
+
