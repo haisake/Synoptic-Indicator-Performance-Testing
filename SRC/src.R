@@ -3,14 +3,14 @@
 #create a function to run the tests
 test <- function(x, n, target, direction, alpha, positive_deviance){
   
-  if (direction =="OVER" & positive_deviance ==FALSE){
+  if (direction =="OVER" & positive_deviance ==TRUE){
     direction <- "greater"
+  }else if (direction =="OVER" & positive_deviance ==FALSE){
+    direction <- "less"
   }else if (direction =="UNDER" & positive_deviance ==FALSE){
-    direction <- "less"
-  }else if (direction =="OVER" & positive_deviance ==TRUE){
-    direction <- "less"
-  }else if (direction =="UNDER" & positive_deviance ==TRUE){
     direction <- "greater"
+  }else if (direction =="UNDER" & positive_deviance ==TRUE){
+    direction <- "less"
   }else{
     direction <- "two.sided"
   }
