@@ -4,13 +4,13 @@
 test <- function(x, n, target, direction, alpha, positive_deviance){
   
   if (direction =="OVER" & positive_deviance ==FALSE){
-    direction <- "greater"
+    direction <- "less"
   }else if (direction =="UNDER" & positive_deviance ==FALSE){
-    direction <- "less"
-  }else if (direction =="OVER" & positive_deviance ==TRUE){
-    direction <- "less"
-  }else if (direction =="UNDER" & positive_deviance ==TRUE){
     direction <- "greater"
+  }else if (direction =="OVER" & positive_deviance ==TRUE){
+    direction <- "greater"
+  }else if (direction =="UNDER" & positive_deviance ==TRUE){
+    direction <- "less"
   }else{
     direction <- "two.sided"
   }
@@ -20,18 +20,23 @@ test <- function(x, n, target, direction, alpha, positive_deviance){
 }
 
 #set local library
-setLibrary <- function(){
-  libPath <-"H:/Hans/R Libraries"   #change this as needed for instal.
-  .libPaths(libPath)                #set the library path 
+setLibrary <- function(mDrive){
+  
+  if (mDrive==TRUE){
+    .libPaths("M:/Laboratory/LIS/Pathology/Synoptic Reporting/Bisrey Analytics Report/R Library")
+  }else {
+    libPath <-"H:/Hans/R Libraries"   #change this as needed for instal.
+    .libPaths(libPath)                #set the library path 
+  }
 }
 
 #load required packages
 loadPackages <- function(){
   require("DescTools")
   require("DBI")
-  require("tidyverse")
+  require("dplyr")
   require("DT")
-  require("rmarkdown")
+  require("tidyr")
 }
 
 
@@ -65,7 +70,7 @@ saveData <- function(db_config, df){
   dbGetQuery(con, "TRUNCATE TABLE CDRProd.dbo.tblPValues") 
   dbWriteTable(con, "tblPValues", df, append=TRUE)
   dbDisconnect(con) #close data base connection
-  return(1)
+  return("Save successful")
 
 }
 
@@ -88,21 +93,45 @@ getPvalues <- function(df, alpha, positive_deviance){
 #identify flagged peers
 flagPeers <- function(df){
 
-  #count flagged peers
-  df1.peers <- df %>% 
-    group_by(Entity, EntityType, Tissue, IndicatorID, TimeFrame, Master_Type) %>% 
-    summarize( flagged_peers = sum(reject), num_peers = n())  %>% 
+  #troubleshooting
+  # df <- df2.data
+
+  #count flagged peers for simple cases
+  df1.peers.simple <- df %>% 
+    filter(grepl("\\.",ConcatMaster)==FALSE) %>%
+    group_by(Tissue, TimeFrame, Master_Vertex, Master_Type) %>% 
+    summarize( flagged_peers = sum(reject), num_peers = n_distinct(Entity))  %>% 
     ungroup()
+  
+  #count flagged peers for complex cases with multi masters
+  df1.peers.complex <- df %>% 
+    filter(grepl("\\.",ConcatMaster)==TRUE) %>%
+    select(Tissue, TimeFrame, ConcatMaster, Master_Type, Master_Vertex ) %>%
+    distinct()
+  
+  df2.peers.complex <- df1.peers.complex %>%
+    inner_join( df1.peers.simple, by=c("Master_Vertex"="Master_Vertex"
+                                       , "Master_Type"="Master_Type"
+                                       , "Tissue"="Tissue"
+                                       , "TimeFrame"="TimeFrame"
+                                       )) %>%
+    group_by(Tissue, TimeFrame, ConcatMaster, Master_Type ) %>%
+    summarize( flagged_peers2 = sum(flagged_peers), num_peers2 = sum(num_peers)) %>%
+    ungroup() %>%
+    select(Tissue, TimeFrame, ConcatMaster, Master_Type, flagged_peers2, num_peers2) %>%
+    rename(flagged_peers = flagged_peers2, num_peers=num_peers2 )
+  
+  #join simple and complex cases together
+  df3.peers.final <- union(df1.peers.simple %>% rename(ConcatMaster = Master_Vertex) , df2.peers.complex )
+
 
   #join data together and compute % of peers flagged
-  # distinct() is not needed if the infrastructure works properly you can think of it as a failsafe
-  df2.final.data <- df %>% 
-    left_join(df1.peers, by =c("Entity"="Entity"
-                              , "EntityType" ="EntityType"
-                              , "Tissue" ="Tissue"
-                              , "IndicatorID"="IndicatorID"
-                              , "TimeFrame" = "TimeFrame"
-                              , "Master_Type"="Master_Type"
+  #we drop the master vertex distinctions here hence why we need distinct
+  df4.final.data <- df %>% 
+    left_join(df3.peers.final, by =c("Tissue" ="Tissue"
+                                     , "TimeFrame" = "TimeFrame"
+                                     , "ConcatMaster"="ConcatMaster"
+                                     , "Master_Type" ="Master_Type"
                               )) %>%
     mutate( percent_peers_flagged = flagged_peers / num_peers
             , value = Numerator/Denominator) %>%
@@ -115,11 +144,10 @@ flagPeers <- function(df){
             ,Target, desiredDirection
             ,p_val ,alpha
             ,reject ,flagged_peers
-            ,num_peers ,percent_peers_flagged) %>%
+            ,num_peers ,percent_peers_flagged)  %>%
     distinct()
-  
 
-  return(df2.final.data)  
+  return(df4.final.data )  
 }
 
 
