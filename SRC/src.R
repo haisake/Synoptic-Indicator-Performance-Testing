@@ -75,7 +75,10 @@ saveData <- function(db_config, df){
 }
 
 #get pvalues for tests of all entities if positive deviance looks for strongest sucesses
-getPvalues <- function(df, alpha, positive_deviance){
+getPvalues <- function(df, positive_deviance, parameters){
+  
+  #df needs to have the numberators, denominators, target values, and desired direction for indicators to test
+  alpha <- parameters$alpha[parameters$positive_deviance==positive_deviance]
   
   df$p_val  <- mapply(test, df$Numerator, df$Denominator, df$Target, df$desiredDirection, alpha, positive_deviance) 
   df$reject <- (df$p_val < alpha)
@@ -99,30 +102,34 @@ flagPeers <- function(df){
   #count flagged peers for simple cases
   df1.peers.simple <- df %>% 
     filter(grepl("\\.",ConcatMaster)==FALSE) %>%
+    select(Tissue, TimeFrame, Master_Vertex, Master_Type, Entity, reject) %>%
+    distinct()
+  
+  df2.peers.simple <- df1.peers.simple %>%
     group_by(Tissue, TimeFrame, Master_Vertex, Master_Type) %>% 
     summarize( flagged_peers = sum(reject), num_peers = n_distinct(Entity))  %>% 
     ungroup()
-  
+ 
   #count flagged peers for complex cases with multi masters
   df1.peers.complex <- df %>% 
     filter(grepl("\\.",ConcatMaster)==TRUE) %>%
     select(Tissue, TimeFrame, ConcatMaster, Master_Type, Master_Vertex ) %>%
     distinct()
-  
+
   df2.peers.complex <- df1.peers.complex %>%
-    inner_join( df1.peers.simple, by=c("Master_Vertex"="Master_Vertex"
+    inner_join( df2.peers.simple , by=c("Master_Vertex"="Master_Vertex"
                                        , "Master_Type"="Master_Type"
                                        , "Tissue"="Tissue"
                                        , "TimeFrame"="TimeFrame"
                                        )) %>%
     group_by(Tissue, TimeFrame, ConcatMaster, Master_Type ) %>%
-    summarize( flagged_peers2 = sum(flagged_peers), num_peers2 = sum(num_peers)) %>%
+    summarize( flagged_peers2 = sum(flagged_peers), num_peers2 = sum(num_peers))  %>%
     ungroup() %>%
     select(Tissue, TimeFrame, ConcatMaster, Master_Type, flagged_peers2, num_peers2) %>%
     rename(flagged_peers = flagged_peers2, num_peers=num_peers2 )
   
   #join simple and complex cases together
-  df3.peers.final <- union(df1.peers.simple %>% rename(ConcatMaster = Master_Vertex) , df2.peers.complex )
+  df3.peers.final <- union(df2.peers.simple %>% rename(ConcatMaster = Master_Vertex) , df2.peers.complex )
 
 
   #join data together and compute % of peers flagged
